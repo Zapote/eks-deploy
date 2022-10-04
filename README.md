@@ -1,1 +1,1 @@
-# go-aws
+# eks-deploy
