@@ -1,12 +1,24 @@
-FROM amazon/aws-cli:latest
+# Deploy-verktyg: kubectl, sops, yq, jq och envsubst ovanpå aws-cli.
+# Taggen anger kubectl-versionen.
+FROM docker.io/amazon/aws-cli:2.36.46
 
-RUN yum update -y
-RUN yum install -y gettext
-RUN curl -o aws-iam-authenticator curl -o aws-iam-authenticator https://amazon-eks.s3-us-west-2.amazonaws.com/1.13.7/2019-06-11/bin/linux/amd64/aws-iam-authenticator \
-    && chmod +x ./aws-iam-authenticator \
-    && mv ./aws-iam-authenticator /usr/local/bin/aws-iam-authenticator
-RUN curl -o kubectl https://amazon-eks.s3-us-west-2.amazonaws.com/1.13.7/2019-06-11/bin/linux/amd64/kubectl \
-    && chmod +x ./kubectl \
-    && mv ./kubectl /usr/local/bin/kubectl
+ARG KUBECTL_VERSION=v1.33.13
+ARG SOPS_VERSION=v3.13.3
+ARG YQ_VERSION=v4.53.6
 
+RUN dnf install -y jq gettext tar gzip git diffutils && dnf clean all
 
+RUN curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+ && echo "$(curl -fsSL https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256)  /usr/local/bin/kubectl" | sha256sum -c - \
+ && chmod +x /usr/local/bin/kubectl
+
+RUN curl -fsSLo /usr/local/bin/sops "https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.amd64" \
+ && curl -fsSL "https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.checksums.txt" \
+    | grep " sops-${SOPS_VERSION}.linux.amd64$" | awk '{print $1"  /usr/local/bin/sops"}' | sha256sum -c - \
+ && chmod +x /usr/local/bin/sops
+
+RUN curl -fsSLo /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" \
+ && chmod +x /usr/local/bin/yq
+
+ENTRYPOINT []
+CMD ["/bin/bash"]
