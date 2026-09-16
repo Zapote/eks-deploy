@@ -7,9 +7,12 @@ on:
   pull_request:
     branches: [ "main" ]
 
-env:
-  REGISTRY: docker.io
-  IMAGE_NAME: ${{ github.repository }}
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -17,21 +20,47 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Taggen ska spegla kubectl-versionen i Dockerfile. Regexet tillåter
+      # bara siffror, så inget annat kan ta sig in i GITHUB_OUTPUT.
+      - name: Read kubectl version from Dockerfile
+        id: kubectl
+        run: |
+          minor=$(sed -n 's/^ARG KUBECTL_VERSION=v\([0-9]\{1,\}\.[0-9]\{1,\}\)\.[0-9]\{1,\}$/\1/p' Dockerfile | head -1)
+          if [ -z "$minor" ]; then
+            echo "Could not parse ARG KUBECTL_VERSION from Dockerfile" >&2
+            exit 1
+          fi
+          echo "minor=$minor" >> "$GITHUB_OUTPUT"
 
       - name: Setup Docker buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: docker.io/zapote/eks-deploy
+          tags: |
+            type=raw,value=k8s-${{ steps.kubectl.outputs.minor }}
+            type=sha,format=long
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v2
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push eks-deploy
         id: b1
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           push: ${{ github.event_name != 'pull_request' }}
-          tags: docker.io/zapote/eks-deploy:0.0.1
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
