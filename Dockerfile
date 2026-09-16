@@ -18,6 +18,11 @@ RUN curl -fsSLo /usr/local/bin/sops "https://github.com/getsops/sops/releases/do
  && chmod +x /usr/local/bin/sops
 
 RUN curl -fsSLo /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" \
+ && curl -fsSLo /tmp/yq_order "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/checksums_hashes_order" \
+ && curl -fsSLo /tmp/yq_sums "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/checksums" \
+ && awk -v col="$(( $(grep -n '^SHA-256$' /tmp/yq_order | cut -d: -f1) + 1 ))" \
+      '$1=="yq_linux_amd64"{print $col"  /usr/local/bin/yq"}' /tmp/yq_sums | sha256sum -c - \
+ && rm -f /tmp/yq_order /tmp/yq_sums \
  && chmod +x /usr/local/bin/yq
 
 ENTRYPOINT []
